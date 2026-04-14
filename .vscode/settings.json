@@ -1,5 +1,20 @@
 {
+  "cmake.cmakePath": "C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe",
   "cmake.configureOnOpen": false,
+  "cmake.configureEnvironment": {
+    "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+    "SdkRootDirPath": "C:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+    "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
+    "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
+    "PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts;${env:PATH}"
+  },
+  "cmake.buildEnvironment": {
+    "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+    "SdkRootDirPath": "C:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+    "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
+    "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
+    "PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts;${env:PATH}"
+  },
   "C_Cpp.errorSquiggles": "disabled",
   "C_Cpp.files.exclude": {
     "**/.vscode": true,
@@ -8,6 +23,8 @@
   "C_Cpp.exclusionPolicy": "checkFolders",
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "cmake.useCMakePresets": "always",
+  "cmake.configurePreset": "flexspi_nor_debug",
+  "cmake.buildPreset": "flexspi_nor_debug",
   "cmake.buildTask": true,
   "cmake.skipConfigureIfCachePresent": true,
   "cmake.sourceDirectory": "${workspaceFolder}"
