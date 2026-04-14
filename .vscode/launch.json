@@ -6,7 +6,7 @@
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "probeType": "LinkServer",
-      "probeSerialNumber": "0229000033528d900000000000000000000000097969905",
+      "probeSerialNumber": "",
       "executable": {
         "elf": "${workspaceFolder}/flexspi_nor_debug/lpspi_interrupt_b2b_master.elf"
       },
