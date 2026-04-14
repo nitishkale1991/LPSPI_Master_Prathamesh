@@ -1,0 +1,32 @@
+{
+  "configurations": [
+    {
+      "type": "mcuxpresso-debug",
+      "name": "Debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "probeType": "LinkServer",
+      "probeSerialNumber": "0229000033528d900000000000000000000000097969905",
+      "executable": {
+        "elf": "${workspaceFolder}/flexspi_nor_debug/lpspi_interrupt_b2b_master.elf"
+      },
+      "executableLoadTypePriority": "elf",
+      "stopAtSymbol": "main",
+      "isAttach": false,
+      "skipBuildBeforeDebug": false,
+      "gdbInitCommands": [
+        "set remotetimeout 600",
+        "set debug-file-directory",
+        "set non-stop off"
+      ],
+      "gdbServerConfigs": {
+        "linkserver": {
+          "device": "MIMXRT1062xxxxB:MIMXRT1060-EVKB"
+        },
+        "segger": {},
+        "pemicro": {}
+      },
+      "showDevDebugOutput": "none"
+    }
+  ]
+}

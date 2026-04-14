@@ -1,0 +1,71 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "name": "flexspi_nor_debug",
+      "displayName": "flexspi_nor_debug",
+      "generator": "Ninja",
+      "binaryDir": "${fileDir}/${presetName}",
+      "toolchainFile": "$env{SdkRootDirPath}/mcuxsdk/cmake/toolchain/armgcc.cmake",
+      "inherits": "flexspi_nor_debug-env",
+      "cacheVariables": {
+        "APP_DIR": {
+          "value": "${fileDir}",
+          "type": "PATH"
+        },
+        "CMAKE_BUILD_TYPE": "flexspi_nor_debug",
+        "SdkRootDirPath": "$env{SdkRootDirPath}/mcuxsdk",
+        "CONFIG_TOOLCHAIN": "armgcc",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_LIBRARY_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_ARCHIVE_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "BOARD_FLASH_RUNNER": "linkserver",
+        "BOARD_DEBUG_RUNNER": "linkserver",
+        "WEST": "TRUE",
+        "board": "evkbmimxrt1060"
+      }
+    },
+    {
+      "name": "flexspi_nor_release",
+      "displayName": "flexspi_nor_release",
+      "generator": "Ninja",
+      "binaryDir": "${fileDir}/${presetName}",
+      "toolchainFile": "$env{SdkRootDirPath}/mcuxsdk/cmake/toolchain/armgcc.cmake",
+      "inherits": "flexspi_nor_release-env",
+      "cacheVariables": {
+        "APP_DIR": {
+          "value": "${fileDir}",
+          "type": "PATH"
+        },
+        "CMAKE_BUILD_TYPE": "flexspi_nor_release",
+        "SdkRootDirPath": "$env{SdkRootDirPath}/mcuxsdk",
+        "CONFIG_TOOLCHAIN": "armgcc",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_LIBRARY_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_ARCHIVE_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "BOARD_FLASH_RUNNER": "linkserver",
+        "BOARD_DEBUG_RUNNER": "linkserver",
+        "WEST": "TRUE",
+        "board": "evkbmimxrt1060"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "flexspi_nor_debug",
+      "displayName": "flexspi_nor_debug",
+      "configurePreset": "flexspi_nor_debug"
+    },
+    {
+      "name": "flexspi_nor_release",
+      "displayName": "flexspi_nor_release",
+      "configurePreset": "flexspi_nor_release"
+    }
+  ],
+  "include": [
+    "mcux_include.json"
+  ]
+}

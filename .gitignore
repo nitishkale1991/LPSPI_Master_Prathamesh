@@ -1,0 +1,42 @@
+# Build output
+/flexspi_nor_debug/
+/flexspi_nor_release/
+/build/
+
+# CMake / Ninja generated files
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/compile_commands.json
+
+# MCUX generated files
+/mcuxsdk_version.h
+/mcux_config.h
+/mcux_modules.txt
+/mcux_settings.txt
+/sysbuild_modules.txt
+/runners.yaml
+/.config
+/.config-*
+/.cmake.dotconfig.checksum
+
+# Binary artifacts
+*.elf
+*.bin
+*.hex
+*.map
+*.obj
+*.o
+*.su
+*.d
+
+# Local helper files
+/AGENTS.md
+/CLAUDE.md
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

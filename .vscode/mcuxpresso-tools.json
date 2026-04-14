@@ -1,0 +1,16 @@
+{
+  "version": "25.3",
+  "toolchainPath": "${userHome}/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+  "linkedProjects": [],
+  "trustZoneType": "none",
+  "multicoreType": "none",
+  "projectType": "sdk-v2-repository",
+  "projectName": "evkbmimxrt1060_lpspi_interrupt_b2b_master",
+  "sdk": {
+    "path": "${userHome}/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+    "version": "26.3.0",
+    "boardId": "evkbmimxrt1060",
+    "deviceId": "MIMXRT1062xxxxB",
+    "coreId": "core0"
+  }
+}

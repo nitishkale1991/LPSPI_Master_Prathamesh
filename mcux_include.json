@@ -1,0 +1,37 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "name": "flexspi_nor_debug-env",
+      "displayName": "flexspi_nor_debug-env",
+      "hidden": true,
+      "environment": {
+        "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+        "SdkRootDirPath": "c:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+        "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
+        "PATH": "$env{MCUX_VENV_PATH}${pathListSep}$penv{PATH}",
+        "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "cacheVariables": {}
+    },
+    {
+      "name": "flexspi_nor_release-env",
+      "displayName": "flexspi_nor_release-env",
+      "hidden": true,
+      "environment": {
+        "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+        "SdkRootDirPath": "c:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+        "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
+        "PATH": "$env{MCUX_VENV_PATH}${pathListSep}$penv{PATH}",
+        "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "cacheVariables": {}
+    }
+  ],
+  "buildPresets": []
+}
