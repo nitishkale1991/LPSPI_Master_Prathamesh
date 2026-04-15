@@ -1,115 +1,77 @@
 /*
- * RT1060 EVKB J17 LPI2C interrupt-based validation transfer
+ * RT1060 EVKB simple bit-banged TFT bring-up
  *
- * Step 1 packet-emulation build:
- *   Replay an ILI9341-style init + red-fill packet script over LPI2C using the
- *   interrupt-driven API, purely so we can observe the command/data framing on
- *   the Saleae.
+ * This version stops using LPI2C entirely. Instead, it reuses the easy-to-reach
+ * J17/J16 header pins as plain GPIO and bit-bangs a SPI-like write stream to an
+ * ILI9341 display module.
  *
- * Wiring to probe on the EVKB:
- *   J17 pin 7  -> GND
- *   J17 pin 9  -> D14 / I2C_SDA -> GPIO_AD_B1_01 -> LPI2C1_SDA
- *   J17 pin 10 -> D15 / I2C_SCL -> GPIO_AD_B1_00 -> LPI2C1_SCL
- *   J16 pin 6  -> D5 / DC       -> GPIO_AD_B0_10 -> GPIO1_IO10
+ * EVKB -> TFT wiring
+ *   J17 pin 1  -> TFT CS
+ *   J17 pin 2  -> TFT RESET
+ *   J17 pin 7  -> TFT GND
+ *   J17 pin 9  -> TFT SDI(MOSI)
+ *   J17 pin 10 -> TFT SCK
+ *   J16 pin 6  -> TFT DC
+ *   3.3V       -> TFT VCC
+ *   3.3V       -> TFT LED
  *
- * Helpful EVKB schematic note:
- *   J17 pin 9 reaches the MCU through R54.
- *   J17 pin 10 reaches the MCU through R95.
+ * Leave these unconnected for now
+ *   TFT SDO(MISO)
+ *   TFT touch pins
+ *   TFT SD card pins
  *
- * Important note:
- *   ILI9341 is a SPI display, not an I2C display. This file does NOT drive the
- *   panel directly. It only re-creates the packet sequence we would want on the
- *   SPI side, while sending it out through interrupt-driven LPI2C so the bus
- *   activity is easy to validate on accessible EVKB header pins.
- *
- * Transport note:
- *   We intentionally set ignoreAck = true for this validation step so the
- *   master clocks out the full write frame even when no real I2C slave is
- *   attached yet. That makes the Saleae capture much easier to verify.
+ * Header signal map on EVKB
+ *   J17 pin 1  = D8  = GPIO_AD_B0_03 = GPIO1_IO03
+ *   J17 pin 2  = D9  = GPIO_AD_B0_02 = GPIO1_IO02
+ *   J17 pin 9  = D14 = GPIO_AD_B1_01 = GPIO1_IO17
+ *   J17 pin 10 = D15 = GPIO_AD_B1_00 = GPIO1_IO16
+ *   J16 pin 6  = D5  = GPIO_AD_B0_10 = GPIO1_IO10
  */
 
 #include "fsl_device_registers.h"
 #include "fsl_debug_console.h"
 #include "fsl_gpio.h"
 #include "fsl_iomuxc.h"
-#include "fsl_lpi2c.h"
-#include "fsl_clock.h"
 #include "board.h"
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-#define TEST_LPI2C_MASTER_BASEADDR LPI2C1
-#define TEST_LPI2C_BAUDRATE        100000U
-#define TEST_LPI2C_TARGET_ADDR     0x3CU
-#define TFT_WIDTH                  240U
-#define TFT_HEIGHT                 320U
-#define TFT_RED_BURST_LINES        8U
+#define TFT_WIDTH         240U
+#define TFT_HEIGHT        320U
+#define TFT_SPI_DELAY_US  1U
+#define TFT_RESET_DELAY_US 20000U
 
-/* Select USB1 PLL (480 MHz) as LPI2C clock source, divided as in the SDK example. */
-#define TEST_LPI2C_CLOCK_SOURCE_SELECT  (0U)
-#define TEST_LPI2C_CLOCK_SOURCE_DIVIDER (5U)
-#define TEST_LPI2C_CLOCK_FREQUENCY \
-    ((CLOCK_GetFreq(kCLOCK_Usb1PllClk) / 8U) / (TEST_LPI2C_CLOCK_SOURCE_DIVIDER + 1U))
+#define TFT_CS_GPIO    GPIO1
+#define TFT_CS_PIN     3U
+#define TFT_RESET_GPIO GPIO1
+#define TFT_RESET_PIN  2U
+#define TFT_DC_GPIO    GPIO1
+#define TFT_DC_PIN     10U
+#define TFT_MOSI_GPIO  GPIO1
+#define TFT_MOSI_PIN   17U
+#define TFT_SCK_GPIO   GPIO1
+#define TFT_SCK_PIN    16U
 
-#define J16_DC_GPIO GPIO1
-#define J16_DC_PIN  10U
-
-typedef struct _display_packet
-{
-    const char *name;
-    uint8_t dcLevel;
-    const uint8_t *data;
-    size_t dataSize;
-    uint32_t postDelayUs;
-} display_packet_t;
-
-static lpi2c_master_handle_t g_lpi2cHandle;
-static volatile bool g_lpi2cTransferComplete = false;
-static volatile status_t g_lpi2cTransferStatus = kStatus_Success;
-
-static const uint8_t g_cmdSoftwareReset[] = {0x01U};
-static const uint8_t g_cmdSleepOut[]      = {0x11U};
-static const uint8_t g_cmdPixelFormat[]   = {0x3AU};
-static const uint8_t g_dataPixelFormat[]  = {0x55U};
-static const uint8_t g_cmdMadctl[]        = {0x36U};
-static const uint8_t g_dataMadctl[]       = {0x48U};
-static const uint8_t g_cmdDisplayOn[]     = {0x29U};
-static const uint8_t g_cmdColumnAddr[]    = {0x2AU};
-static const uint8_t g_dataColumnAddr[]   = {0x00U, 0x00U, 0x00U, 0xEFU};
-static const uint8_t g_cmdPageAddr[]      = {0x2BU};
-static const uint8_t g_dataPageAddr[]     = {0x00U, 0x00U, 0x01U, 0x3FU};
-static const uint8_t g_cmdMemoryWrite[]   = {0x2CU};
-static uint8_t g_redLineData[TFT_WIDTH * 2U];
-
-static const display_packet_t g_displayInitPackets[] = {
-    {"SWRESET", 0U, g_cmdSoftwareReset, sizeof(g_cmdSoftwareReset), 5000U},
-    {"SLPOUT", 0U, g_cmdSleepOut, sizeof(g_cmdSleepOut), 120000U},
-    {"COLMOD", 0U, g_cmdPixelFormat, sizeof(g_cmdPixelFormat), 0U},
-    {"COLMOD_DATA", 1U, g_dataPixelFormat, sizeof(g_dataPixelFormat), 1000U},
-    {"MADCTL", 0U, g_cmdMadctl, sizeof(g_cmdMadctl), 0U},
-    {"MADCTL_DATA", 1U, g_dataMadctl, sizeof(g_dataMadctl), 1000U},
-    {"DISPON", 0U, g_cmdDisplayOn, sizeof(g_cmdDisplayOn), 10000U},
-    {"CASET", 0U, g_cmdColumnAddr, sizeof(g_cmdColumnAddr), 0U},
-    {"CASET_DATA", 1U, g_dataColumnAddr, sizeof(g_dataColumnAddr), 0U},
-    {"PASET", 0U, g_cmdPageAddr, sizeof(g_cmdPageAddr), 0U},
-    {"PASET_DATA", 1U, g_dataPageAddr, sizeof(g_dataPageAddr), 0U},
-    {"RAMWR", 0U, g_cmdMemoryWrite, sizeof(g_cmdMemoryWrite), 0U},
-};
+static const uint8_t g_colmodData[] = {0x55U};
+static const uint8_t g_madctlData[] = {0x48U};
+static const uint8_t g_columnAddr[] = {0x00U, 0x00U, 0x00U, 0xEFU};
+static const uint8_t g_pageAddr[]   = {0x00U, 0x00U, 0x01U, 0x3FU};
 
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
 void BOARD_InitHardware(void);
 static void DelayUs(uint32_t us);
-static void Board_InitValidationPins(void);
-static void Board_InitValidationLpi2c(void);
-static void PrepareDisplayPacketData(void);
-static status_t SendDisplayPacketInterrupt(const display_packet_t *packet);
-static void Lpi2cTransferDoneCallback(LPI2C_Type *base,
-                                      lpi2c_master_handle_t *handle,
-                                      status_t completionStatus,
-                                      void *userData);
+static void TftGpioInit(void);
+static void TftReset(void);
+static void TftWriteByte(uint8_t value);
+static void TftWriteCommand(uint8_t command);
+static void TftWriteDataBuffer(const uint8_t *data, size_t size);
+static void TftWriteCommandWithData(uint8_t command, const uint8_t *data, size_t size);
+static void TftSetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
+static void TftInitMinimal(void);
+static void TftFillScreenGreen(void);
 
 /*******************************************************************************
  * Helpers
@@ -119,107 +81,185 @@ static void DelayUs(uint32_t us)
     SDK_DelayAtLeastUs(us, SystemCoreClock);
 }
 
-static void Board_InitValidationPins(void)
+static void TftCsSet(uint8_t level)
+{
+    GPIO_WritePinOutput(TFT_CS_GPIO, TFT_CS_PIN, level);
+}
+
+static void TftDcSet(uint8_t level)
+{
+    GPIO_WritePinOutput(TFT_DC_GPIO, TFT_DC_PIN, level);
+}
+
+static void TftResetSet(uint8_t level)
+{
+    GPIO_WritePinOutput(TFT_RESET_GPIO, TFT_RESET_PIN, level);
+}
+
+static void TftMosiSet(uint8_t level)
+{
+    GPIO_WritePinOutput(TFT_MOSI_GPIO, TFT_MOSI_PIN, level);
+}
+
+static void TftSckSet(uint8_t level)
+{
+    GPIO_WritePinOutput(TFT_SCK_GPIO, TFT_SCK_PIN, level);
+}
+
+static void TftGpioInit(void)
 {
     gpio_pin_config_t outCfg = {
         .direction = kGPIO_DigitalOutput,
-        .outputLogic = 0U,
+        .outputLogic = 1U,
         .interruptMode = kGPIO_NoIntmode,
     };
 
     CLOCK_EnableClock(kCLOCK_Iomuxc);
 
-    /* J17 pin 10 = D15 / I2C_SCL = GPIO_AD_B1_00 = LPI2C1_SCL */
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B1_00_LPI2C1_SCL, 1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B1_00_LPI2C1_SCL, 0xD8B0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_03_GPIO1_IO03, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_03_GPIO1_IO03, 0x10B0U);
 
-    /* J17 pin 9 = D14 / I2C_SDA = GPIO_AD_B1_01 = LPI2C1_SDA */
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B1_01_LPI2C1_SDA, 1U);
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B1_01_LPI2C1_SDA, 0xD8B0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_02_GPIO1_IO02, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_02_GPIO1_IO02, 0x10B0U);
 
-    /* J16 pin 6 = D5 / DC = GPIO_AD_B0_10 = GPIO1_IO10 */
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_10_GPIO1_IO10, 0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_10_GPIO1_IO10, 0x10B0U);
 
-    GPIO_PinInit(J16_DC_GPIO, J16_DC_PIN, &outCfg);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B1_01_GPIO1_IO17, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B1_01_GPIO1_IO17, 0x10B0U);
+
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B1_00_GPIO1_IO16, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B1_00_GPIO1_IO16, 0x10B0U);
+
+    GPIO_PinInit(TFT_CS_GPIO, TFT_CS_PIN, &outCfg);
+    GPIO_PinInit(TFT_RESET_GPIO, TFT_RESET_PIN, &outCfg);
+    GPIO_PinInit(TFT_DC_GPIO, TFT_DC_PIN, &outCfg);
+    GPIO_PinInit(TFT_MOSI_GPIO, TFT_MOSI_PIN, &outCfg);
+    GPIO_PinInit(TFT_SCK_GPIO, TFT_SCK_PIN, &outCfg);
+
+    TftCsSet(1U);
+    TftResetSet(1U);
+    TftDcSet(1U);
+    TftMosiSet(0U);
+    TftSckSet(0U);
 }
 
-static void Board_InitValidationLpi2c(void)
+static void TftReset(void)
 {
-    lpi2c_master_config_t masterConfig;
-
-    /* Match the EVKB SDK examples for LPI2C1 clocking. */
-    CLOCK_SetMux(kCLOCK_Lpi2cMux, TEST_LPI2C_CLOCK_SOURCE_SELECT);
-    CLOCK_SetDiv(kCLOCK_Lpi2cDiv, TEST_LPI2C_CLOCK_SOURCE_DIVIDER);
-
-    LPI2C_MasterGetDefaultConfig(&masterConfig);
-    masterConfig.baudRate_Hz = TEST_LPI2C_BAUDRATE;
-    masterConfig.pinConfig = kLPI2C_2PinOpenDrain;
-    masterConfig.ignoreAck = true;
-
-    LPI2C_MasterInit(TEST_LPI2C_MASTER_BASEADDR, &masterConfig, TEST_LPI2C_CLOCK_FREQUENCY);
-    LPI2C_MasterTransferCreateHandle(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, Lpi2cTransferDoneCallback, NULL);
+    TftResetSet(1U);
+    DelayUs(5000U);
+    TftResetSet(0U);
+    DelayUs(TFT_RESET_DELAY_US);
+    TftResetSet(1U);
+    DelayUs(120000U);
 }
 
-static void PrepareDisplayPacketData(void)
+static void TftWriteByte(uint8_t value)
 {
-    for (uint32_t x = 0U; x < TFT_WIDTH; x++)
+    for (uint8_t mask = 0x80U; mask != 0U; mask >>= 1U)
     {
-        g_redLineData[2U * x] = 0xF8U;
-        g_redLineData[(2U * x) + 1U] = 0x00U;
+        TftMosiSet((value & mask) != 0U ? 1U : 0U);
+        DelayUs(TFT_SPI_DELAY_US);
+        TftSckSet(1U);
+        DelayUs(TFT_SPI_DELAY_US);
+        TftSckSet(0U);
     }
 }
 
-static void Lpi2cTransferDoneCallback(LPI2C_Type *base,
-                                      lpi2c_master_handle_t *handle,
-                                      status_t completionStatus,
-                                      void *userData)
+static void TftWriteCommand(uint8_t command)
 {
-    (void)base;
-    (void)handle;
-    (void)userData;
-
-    g_lpi2cTransferStatus = completionStatus;
-    g_lpi2cTransferComplete = true;
+    TftCsSet(0U);
+    TftDcSet(0U);
+    TftWriteByte(command);
+    TftCsSet(1U);
 }
 
-static status_t SendDisplayPacketInterrupt(const display_packet_t *packet)
+static void TftWriteDataBuffer(const uint8_t *data, size_t size)
 {
-    lpi2c_master_transfer_t masterXfer = {0};
-    status_t status;
+    TftCsSet(0U);
+    TftDcSet(1U);
 
-    /* DC stays outside I2C and lets us mimic SPI command/data framing. */
-    GPIO_WritePinOutput(J16_DC_GPIO, J16_DC_PIN, packet->dcLevel);
-
-    g_lpi2cTransferComplete = false;
-    g_lpi2cTransferStatus = kStatus_Success;
-
-    masterXfer.slaveAddress = TEST_LPI2C_TARGET_ADDR;
-    masterXfer.direction = kLPI2C_Write;
-    masterXfer.subaddress = 0U;
-    masterXfer.subaddressSize = 0U;
-    masterXfer.data = (void *)packet->data;
-    masterXfer.dataSize = packet->dataSize;
-    masterXfer.flags = kLPI2C_TransferDefaultFlag;
-
-    /* Start one interrupt-driven transfer. The ISR advances the frame. */
-    status = LPI2C_MasterTransferNonBlocking(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, &masterXfer);
-    if (status != kStatus_Success)
+    for (size_t i = 0U; i < size; i++)
     {
-        return status;
+        TftWriteByte(data[i]);
     }
 
-    /* Keep the demo easy to follow: wait here until the callback marks done. */
-    while (!g_lpi2cTransferComplete)
+    TftCsSet(1U);
+}
+
+static void TftWriteCommandWithData(uint8_t command, const uint8_t *data, size_t size)
+{
+    TftWriteCommand(command);
+    if ((data != NULL) && (size != 0U))
     {
+        TftWriteDataBuffer(data, size);
+    }
+}
+
+static void TftSetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    uint8_t columnData[4];
+    uint8_t pageData[4];
+
+    columnData[0] = (uint8_t)(x0 >> 8);
+    columnData[1] = (uint8_t)(x0 & 0xFFU);
+    columnData[2] = (uint8_t)(x1 >> 8);
+    columnData[3] = (uint8_t)(x1 & 0xFFU);
+
+    pageData[0] = (uint8_t)(y0 >> 8);
+    pageData[1] = (uint8_t)(y0 & 0xFFU);
+    pageData[2] = (uint8_t)(y1 >> 8);
+    pageData[3] = (uint8_t)(y1 & 0xFFU);
+
+    TftWriteCommandWithData(0x2AU, columnData, sizeof(columnData));
+    TftWriteCommandWithData(0x2BU, pageData, sizeof(pageData));
+}
+
+static void TftInitMinimal(void)
+{
+    TftReset();
+
+    TftWriteCommand(0x01U);
+    DelayUs(5000U);
+
+    TftWriteCommand(0x11U);
+    DelayUs(120000U);
+
+    TftWriteCommandWithData(0x3AU, g_colmodData, sizeof(g_colmodData));
+    DelayUs(1000U);
+
+    TftWriteCommandWithData(0x36U, g_madctlData, sizeof(g_madctlData));
+    DelayUs(1000U);
+
+    TftWriteCommandWithData(0x2AU, g_columnAddr, sizeof(g_columnAddr));
+    TftWriteCommandWithData(0x2BU, g_pageAddr, sizeof(g_pageAddr));
+
+    TftWriteCommand(0x29U);
+    DelayUs(10000U);
+}
+
+static void TftFillScreenGreen(void)
+{
+    const uint8_t greenHi = 0x07U;
+    const uint8_t greenLo = 0xE0U;
+
+    TftSetAddressWindow(0U, 0U, TFT_WIDTH - 1U, TFT_HEIGHT - 1U);
+
+    TftCsSet(0U);
+    TftDcSet(0U);
+    TftWriteByte(0x2CU);
+    TftDcSet(1U);
+
+    for (uint32_t y = 0U; y < TFT_HEIGHT; y++)
+    {
+        for (uint32_t x = 0U; x < TFT_WIDTH; x++)
+        {
+            TftWriteByte(greenHi);
+            TftWriteByte(greenLo);
+        }
     }
 
-    if (packet->postDelayUs != 0U)
-    {
-        DelayUs(packet->postDelayUs);
-    }
-
-    return g_lpi2cTransferStatus;
+    TftCsSet(1U);
 }
 
 /*******************************************************************************
@@ -227,58 +267,20 @@ static status_t SendDisplayPacketInterrupt(const display_packet_t *packet)
  ******************************************************************************/
 int main(void)
 {
-    status_t status;
-
     BOARD_InitHardware();
+    TftGpioInit();
 
-    Board_InitValidationPins();
-    Board_InitValidationLpi2c();
-    PrepareDisplayPacketData();
+    PRINTF("\r\n=== EVKB Bit-Banged TFT Bring-Up ===\r\n");
+    PRINTF("J17.1=CS, J17.2=RESET, J17.9=MOSI, J17.10=SCK, J16.6=DC\r\n");
+    PRINTF("Power TFT from 3.3V and GND, tie LED to 3.3V for now.\r\n");
+    PRINTF("Initializing ILI9341...\r\n");
 
-    PRINTF("\r\n=== Step 1: LPI2C Interrupt TFT Packet Emulation ===\r\n");
-    PRINTF("Probe J17 pin 9 = SDA, J17 pin 10 = SCL, J16 pin 6 = DC, J17 pin 7 = GND.\r\n");
-    PRINTF("LPI2C1 writes repeatedly at %u Hz to 0x%02X using interrupt-based transfers.\r\n",
-           TEST_LPI2C_BAUDRATE,
-           TEST_LPI2C_TARGET_ADDR);
-    PRINTF("This replays ILI9341-style command/data frames only; it does not drive the SPI TFT directly.\r\n");
-    PRINTF("ignoreAck=true is enabled so Saleae sees full frames without a real I2C slave.\r\n");
+    TftInitMinimal();
+
+    PRINTF("Continuously blasting red frames...\r\n");
 
     while (1)
     {
-        for (uint32_t i = 0U; i < (sizeof(g_displayInitPackets) / sizeof(g_displayInitPackets[0])); i++)
-        {
-            status = SendDisplayPacketInterrupt(&g_displayInitPackets[i]);
-            if (status != kStatus_Success)
-            {
-                PRINTF("Packet %s failed with status %d\r\n", g_displayInitPackets[i].name, (int)status);
-                break;
-            }
-        }
-
-        if (status != kStatus_Success)
-        {
-            DelayUs(500000U);
-            continue;
-        }
-
-        for (uint32_t line = 0U; line < TFT_RED_BURST_LINES; line++)
-        {
-            display_packet_t redPacket = {
-                .name = "RED_LINE_DATA",
-                .dcLevel = 1U,
-                .data = g_redLineData,
-                .dataSize = sizeof(g_redLineData),
-                .postDelayUs = 0U,
-            };
-
-            status = SendDisplayPacketInterrupt(&redPacket);
-            if (status != kStatus_Success)
-            {
-                PRINTF("Red line %lu failed with status %d\r\n", (unsigned long)line, (int)status);
-                break;
-            }
-        }
-
-        DelayUs(500000U);
+        TftFillScreenGreen();
     }
 }
