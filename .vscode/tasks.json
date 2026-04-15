@@ -2,6 +2,43 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "type": "cmake",
+      "label": "CMake: build",
+      "command": "build",
+      "preset": "flexspi_nor_debug",
+      "targets": [
+        "all"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "detail": "CMake template build task"
+    },
+    {
+      "type": "cmake",
+      "label": "CMake: clean",
+      "command": "clean",
+      "preset": "flexspi_nor_debug",
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "detail": "CMake template clean task"
+    },
+    {
+      "type": "cmake",
+      "label": "CMake: configure",
+      "command": "configure",
+      "preset": "flexspi_nor_debug",
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "detail": "CMake template configure task"
+    },
+    {
       "label": "MCUX Safe Configure",
       "type": "shell",
       "command": "C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe",

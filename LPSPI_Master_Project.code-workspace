@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.useCMakePresets": "always",
+    "cmake.configurePreset": "flexspi_nor_debug",
+    "cmake.buildPreset": "flexspi_nor_debug"
+  }
+}
