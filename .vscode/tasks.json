@@ -2,76 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "cmake",
-      "label": "CMake: build",
-      "command": "build",
-      "preset": "flexspi_nor_debug",
-      "targets": [
-        "all"
-      ],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": [
-        "$gcc"
-      ],
-      "detail": "CMake template build task"
-    },
-    {
-      "type": "cmake",
-      "label": "CMake: clean",
-      "command": "clean",
-      "preset": "flexspi_nor_debug",
-      "problemMatcher": [
-        "$gcc"
-      ],
-      "detail": "CMake template clean task"
-    },
-    {
-      "type": "cmake",
-      "label": "CMake: configure",
-      "command": "configure",
-      "preset": "flexspi_nor_debug",
-      "problemMatcher": [
-        "$gcc"
-      ],
-      "detail": "CMake template configure task"
-    },
-    {
-      "label": "MCUX: build (shell fallback)",
-      "type": "shell",
-      "command": "C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe",
-      "args": [
-        "--build",
-        "${workspaceFolder}/flexspi_nor_debug",
-        "--target",
-        "all",
-        "--"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
-          "SdkRootDirPath": "C:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
-          "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
-          "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
-          "PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts;${env:PATH}"
-        }
-      },
-      "dependsOn": [
-        "MCUX: configure (shell fallback)"
-      ],
-      "problemMatcher": [
-        "$gcc"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      }
-    },
-    {
-      "label": "MCUX: configure (shell fallback)",
+      "label": "MCUX Safe Configure",
       "type": "shell",
       "command": "C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe",
       "args": [
@@ -94,18 +25,56 @@
       "presentation": {
         "reveal": "always",
         "panel": "shared"
-      }
+      },
+      "detail": "Configure the flexspi_nor_debug preset"
     },
     {
-      "label": "MCUX: clean (shell fallback)",
+      "label": "MCUX Safe Build",
       "type": "shell",
       "command": "C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe",
       "args": [
         "--build",
         "${workspaceFolder}/flexspi_nor_debug",
         "--target",
-        "clean",
+        "all",
         "--"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "ARMGCC_DIR": "C:/Users/NitishKale/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+          "SdkRootDirPath": "C:/Users/NitishKale/Documents/Personal/Prathamesh_Project/SDK_2_16_000_EVK-MIMXRT1060/mcuxsdk",
+          "MCUX_VENV_PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts",
+          "POSTPROCESS_UTILITY": "C:/Users/NitishKale/.mcuxpressotools/mcux-fixelf-14.2.2/mcux-fixelf.exe",
+          "PATH": "C:/Users/NitishKale/.mcuxpressotools/.mcux-venv-3.12/Scripts;${env:PATH}"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": [
+        "MCUX Safe Configure"
+      ],
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "Configure first, then build the flexspi_nor_debug folder"
+    },
+    {
+      "label": "MCUX Safe Clean",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "if (Test-Path -LiteralPath '${workspaceFolder}\\flexspi_nor_debug') { & 'C:/Users/NitishKale/.mcuxpressotools/cmake-3.30.0-windows-x86_64/bin/cmake.exe' --build '${workspaceFolder}/flexspi_nor_debug' --target clean -- } else { Write-Host 'Build directory does not exist yet. Nothing to clean.' }"
       ],
       "options": {
         "cwd": "${workspaceFolder}",
@@ -123,7 +92,8 @@
       "presentation": {
         "reveal": "always",
         "panel": "shared"
-      }
+      },
+      "detail": "Clean if the build directory exists, otherwise exit successfully"
     }
   ]
 }
