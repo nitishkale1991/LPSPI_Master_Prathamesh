@@ -240,8 +240,11 @@ static void TftInitMinimal(void)
 
 static void TftFillScreenGreen(void)
 {
-    const uint8_t greenHi = 0x07U;
-    const uint8_t greenLo = 0xE0U;
+    //const uint8_t greenHi = 0x07U;
+    //const uint8_t greenLo = 0xE0U;
+    /*For red color use these values*/
+    uint8_t redHi = 0xF8;
+    uint8_t redLo = 0x00;
 
     TftSetAddressWindow(0U, 0U, TFT_WIDTH - 1U, TFT_HEIGHT - 1U);
 
@@ -254,8 +257,8 @@ static void TftFillScreenGreen(void)
     {
         for (uint32_t x = 0U; x < TFT_WIDTH; x++)
         {
-            TftWriteByte(greenHi);
-            TftWriteByte(greenLo);
+            TftWriteByte(redHi);
+            TftWriteByte(redLo);
         }
     }
 
