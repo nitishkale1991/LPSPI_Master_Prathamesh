@@ -67,7 +67,6 @@ typedef struct _display_packet
 static lpi2c_master_handle_t g_lpi2cHandle;
 static volatile bool g_lpi2cTransferComplete = false;
 static volatile status_t g_lpi2cTransferStatus = kStatus_Success;
-static volatile uint32_t g_transferCount = 0U;
 
 static const uint8_t g_cmdSoftwareReset[] = {0x01U};
 static const uint8_t g_cmdSleepOut[]      = {0x11U};
@@ -106,12 +105,11 @@ static void DelayUs(uint32_t us);
 static void Board_InitValidationPins(void);
 static void Board_InitValidationLpi2c(void);
 static void PrepareDisplayPacketData(void);
-static status_t StartValidationTransfer(const uint8_t *data, size_t dataSize);
-static status_t SendDisplayPacket(const display_packet_t *packet);
-static void lpi2c_master_callback(LPI2C_Type *base,
-                                  lpi2c_master_handle_t *handle,
-                                  status_t completionStatus,
-                                  void *userData);
+static status_t SendDisplayPacketInterrupt(const display_packet_t *packet);
+static void Lpi2cTransferDoneCallback(LPI2C_Type *base,
+                                      lpi2c_master_handle_t *handle,
+                                      status_t completionStatus,
+                                      void *userData);
 
 /*******************************************************************************
  * Helpers
@@ -160,7 +158,7 @@ static void Board_InitValidationLpi2c(void)
     masterConfig.ignoreAck = true;
 
     LPI2C_MasterInit(TEST_LPI2C_MASTER_BASEADDR, &masterConfig, TEST_LPI2C_CLOCK_FREQUENCY);
-    LPI2C_MasterTransferCreateHandle(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, lpi2c_master_callback, NULL);
+    LPI2C_MasterTransferCreateHandle(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, Lpi2cTransferDoneCallback, NULL);
 }
 
 static void PrepareDisplayPacketData(void)
@@ -172,10 +170,10 @@ static void PrepareDisplayPacketData(void)
     }
 }
 
-static void lpi2c_master_callback(LPI2C_Type *base,
-                                  lpi2c_master_handle_t *handle,
-                                  status_t completionStatus,
-                                  void *userData)
+static void Lpi2cTransferDoneCallback(LPI2C_Type *base,
+                                      lpi2c_master_handle_t *handle,
+                                      status_t completionStatus,
+                                      void *userData)
 {
     (void)base;
     (void)handle;
@@ -185,9 +183,13 @@ static void lpi2c_master_callback(LPI2C_Type *base,
     g_lpi2cTransferComplete = true;
 }
 
-static status_t StartValidationTransfer(const uint8_t *data, size_t dataSize)
+static status_t SendDisplayPacketInterrupt(const display_packet_t *packet)
 {
     lpi2c_master_transfer_t masterXfer = {0};
+    status_t status;
+
+    /* DC stays outside I2C and lets us mimic SPI command/data framing. */
+    GPIO_WritePinOutput(J16_DC_GPIO, J16_DC_PIN, packet->dcLevel);
 
     g_lpi2cTransferComplete = false;
     g_lpi2cTransferStatus = kStatus_Success;
@@ -196,25 +198,18 @@ static status_t StartValidationTransfer(const uint8_t *data, size_t dataSize)
     masterXfer.direction = kLPI2C_Write;
     masterXfer.subaddress = 0U;
     masterXfer.subaddressSize = 0U;
-    masterXfer.data = (void *)data;
-    masterXfer.dataSize = dataSize;
+    masterXfer.data = (void *)packet->data;
+    masterXfer.dataSize = packet->dataSize;
     masterXfer.flags = kLPI2C_TransferDefaultFlag;
 
-    return LPI2C_MasterTransferNonBlocking(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, &masterXfer);
-}
-
-static status_t SendDisplayPacket(const display_packet_t *packet)
-{
-    status_t status;
-
-    GPIO_WritePinOutput(J16_DC_GPIO, J16_DC_PIN, packet->dcLevel);
-
-    status = StartValidationTransfer(packet->data, packet->dataSize);
+    /* Start one interrupt-driven transfer. The ISR advances the frame. */
+    status = LPI2C_MasterTransferNonBlocking(TEST_LPI2C_MASTER_BASEADDR, &g_lpi2cHandle, &masterXfer);
     if (status != kStatus_Success)
     {
         return status;
     }
 
+    /* Keep the demo easy to follow: wait here until the callback marks done. */
     while (!g_lpi2cTransferComplete)
     {
     }
@@ -252,13 +247,12 @@ int main(void)
     {
         for (uint32_t i = 0U; i < (sizeof(g_displayInitPackets) / sizeof(g_displayInitPackets[0])); i++)
         {
-            status = SendDisplayPacket(&g_displayInitPackets[i]);
+            status = SendDisplayPacketInterrupt(&g_displayInitPackets[i]);
             if (status != kStatus_Success)
             {
                 PRINTF("Packet %s failed with status %d\r\n", g_displayInitPackets[i].name, (int)status);
                 break;
             }
-            g_transferCount++;
         }
 
         if (status != kStatus_Success)
@@ -277,13 +271,12 @@ int main(void)
                 .postDelayUs = 0U,
             };
 
-            status = SendDisplayPacket(&redPacket);
+            status = SendDisplayPacketInterrupt(&redPacket);
             if (status != kStatus_Success)
             {
                 PRINTF("Red line %lu failed with status %d\r\n", (unsigned long)line, (int)status);
                 break;
             }
-            g_transferCount++;
         }
 
         DelayUs(500000U);
